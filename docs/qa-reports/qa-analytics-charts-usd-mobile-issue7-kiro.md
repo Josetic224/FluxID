@@ -10,9 +10,21 @@
 
 ---
 
+## Full-page Screenshots
+
+### Desktop (900 px)
+
+![Desktop full page](../grantfox-OSS/issue7-QA_analytics/desktop-full-page.png)
+
+### Mobile (375 px)
+
+![Mobile full page](../grantfox-OSS/issue7-QA_analytics/mobile-full-page.png)
+
+---
+
 ## Summary
 
-The Analytics page at `/dashboard/analytics` functions correctly for its core purpose and all six panels render with data for active wallets. CoinGecko price attribution is present, USD math is consistent, and the empty-state handling for unalyaed wallets is clean. However, the code audit uncovered **five bugs** of varying severity — one of which is a visible rendering defect (bare comma in the Assets card), one is a data-accuracy issue (30-tx hard cap on chart inputs), one is a duplicate code smell that creates a race condition risk (three parallel CoinGecko fetches per page load), and two are UX/labeling issues. No panel crashes, no data loss.
+The Analytics page functions correctly for its core purpose — all six panels render with data for active wallets, CoinGecko price attribution is present, USD math is consistent, and the empty-state handling is clean. However, the code audit uncovered **five findings** of varying severity: one visible rendering defect (bare comma in the Assets card), one data-accuracy issue (30-tx hard cap on chart inputs), one duplicate code smell that causes 3–4 concurrent CoinGecko requests per page load, and two low-severity UX/labeling observations. No panel crashes, no data loss.
 
 ---
 
@@ -42,17 +54,17 @@ The Analytics page at `/dashboard/analytics` functions correctly for its core pu
 
   **Root cause:**
   ```ts
-  // frontend/app/components/FlowSummary.tsx, line 143
+  // frontend/app/components/FlowSummary.tsx, line 137
   primary: assets ? assetCountLabel(assets) : ",",
   ```
-  The fallback string is `","` instead of `"—"` or `"N/A"`. This is clearly a copy-paste artifact.
-
-  **Screenshot:** `docs/grantfox-OSS/issue7-QA_analytics/bug01-assets-comma.png`
+  The fallback string is `","` instead of `"—"`. Clearly a copy-paste artifact.
 
   **Fix:**
   ```ts
   primary: assets ? assetCountLabel(assets) : "—",
   ```
+
+![BUG-01 — Assets card shows bare comma](../grantfox-OSS/issue7-QA_analytics/bug01-assets-comma.png)
 
 ---
 
@@ -74,14 +86,14 @@ The Analytics page at `/dashboard/analytics` functions correctly for its core pu
 
 **Status: PASS with one observation (OBS-01)**
 
-- Last 7 calendar days that have data are shown as bar pairs (green = inflow, red = outflow). ✅
+- Bar pairs (green = inflow, red = outflow) render for active days. ✅
 - `USD (XLM + USDC) via CoinGecko` subtitle appears in the header. ✅
 - Tooltip on hover correctly reads `Inflow 2026-08-12: $XX.XX`. ✅
 - Non-XLM/USDC assets are skipped; a footnote counts skipped transactions. ✅
 - Legend (green inflow, red outflow) is present at the bottom. ✅
-- **OBS-01 (LOW):** The component is titled "7-Day Flow Pattern" but `sortedDates` slices the **last 7 dates that have transactions**, not the last 7 calendar days. A wallet with no activity on certain days will show fewer than 7 bars with no visual indication of the gap. This can mislead users into thinking the wallet was active every visible day.
+- **OBS-01 (LOW):** `sortedDates` slices the **last 7 dates that have transactions**, not the last 7 calendar days. A wallet inactive on certain days shows fewer than 7 bars with no gap indicator — misleading given the "7-Day" title.
 
-  **Screenshot:** `docs/grantfox-OSS/issue7-QA_analytics/obs01-7day-missing-days.png`
+![OBS-01 — 7-Day chart skips empty calendar days](../grantfox-OSS/issue7-QA_analytics/obs01-7day-missing-days.png)
 
 ---
 
@@ -90,13 +102,12 @@ The Analytics page at `/dashboard/analytics` functions correctly for its core pu
 **Status: PASS with one observation (OBS-02)**
 
 - Up to 8 weekly buckets render correctly. ✅
-- The week-start label below each bar group shows `MM-DD` format. ✅
 - CoinGecko attribution footnote appears at the bottom. ✅
 - Bars are visually proportional; max bar height corresponds to the largest combined in+out week. ✅
 - `startOfWeek` correctly uses UTC Monday as the week anchor. ✅
-- **OBS-02 (LOW):** The week label is always `weekStart.slice(5)` — that is, `MM-DD`. For wallets with data spanning a year boundary, labels like `01-03` and `12-29` appear on the same chart with no year indicator, which is ambiguous. Adding the year (YYYY-MM-DD → "Jan 03 '25") would improve clarity.
+- **OBS-02 (LOW):** Week labels are always `weekStart.slice(5)` → `MM-DD` only. For wallets with data spanning a year boundary, `01-03` and `12-29` appear on the same chart with no year shown — ambiguous.
 
-  **Screenshot:** `docs/grantfox-OSS/issue7-QA_analytics/obs02-weekly-label-no-year.png`
+![OBS-02 — Weekly Trend labels missing year](../grantfox-OSS/issue7-QA_analytics/obs02-weekly-label-no-year.png)
 
 ---
 
@@ -109,7 +120,7 @@ The Analytics page at `/dashboard/analytics` functions correctly for its core pu
 - `(via CoinGecko)` attribution appears when XLM price is available. ✅
 - `(USDC only — XLM price unavailable)` fallback message appears correctly when price fetch fails. ✅
 - The card correctly hides itself (`return null`) when there are zero priced transactions. ✅
-- USD math cross-check: Mean ≈ sum of all USD transaction values ÷ count — verified spot-check within rounding. ✅
+- USD math cross-check: Mean ≈ sum of USD values ÷ count — verified spot-check. ✅
 
 ---
 
@@ -120,38 +131,36 @@ The Analytics page at `/dashboard/analytics` functions correctly for its core pu
 - Six USD buckets render with horizontal bars. ✅
 - Bar widths are proportional to count. ✅
 - Total priced tx count appears in the header. ✅
-- Empty state (`No priced transactions to distribute.`) renders correctly for wallets without XLM price data. ✅
-- **BUG-02 (MEDIUM):** The distribution and all time-series charts consume `analysis.transactions`, which is capped at **30 items** by `parsePayments(...).slice(0, 30)` in `frontend/lib/scoring.ts`. For a wallet with 100 fetched transactions, the chart panels only visualize 30 — but the FlowSummary `transactionCount` reports the full count from backend metrics. This creates a visible **count mismatch**: "49 transactions analyzed" in the header but "49 priced txs" in the Distribution footer may show only 30. The discrepancy silently affects the Volatility and Weekly Trend panels too.
+- Empty state (`No priced transactions to distribute.`) renders correctly for wallets without price data. ✅
+- **BUG-02 (MEDIUM):** All chart panels consume `analysis.transactions`, which is capped at **30 items** by `parsePayments(...).slice(0, 30)` in `frontend/lib/scoring.ts`. The FlowSummary `transactionCount` reports the full backend count (e.g. 49), while the Distribution footer says "30 priced txs". The mismatch silently affects Volatility and Weekly Trend too.
 
-  **Root cause:** `parsePayments` in `frontend/lib/scoring.ts`:
+  **Root cause:**
   ```ts
-  return parsed.slice(0, 30);
+  // frontend/lib/scoring.ts, line 204
+  return parsed.slice(0, 30);  // Horizon fetches up to 100
   ```
-  The backend path fetches up to 100 transactions via Horizon, processes all of them for scoring, but returns only 30 to the frontend `transactions` array.
 
-  **Screenshot:** `docs/grantfox-OSS/issue7-QA_analytics/bug02-tx-count-mismatch.png`
+  **Fix suggestion:** Remove the cap or raise it to 100 to match the Horizon fetch limit, or add a visible footnote clarifying the cap.
 
-  **Fix suggestion:** Remove the `.slice(0, 30)` cap or at least raise it to match the backend's fetch limit (100), or add a note in the chart header clarifying the cap.
+![BUG-02 — 30-tx cap causes count mismatch](../grantfox-OSS/issue7-QA_analytics/bug02-tx-count-mismatch.png)
 
 ---
 
 ## Additional Bug: Duplicate CoinGecko Fetches
 
-**BUG-03 (MEDIUM):** The `fetchXlmPrice()` function is copy-pasted three times — once in each of `FlowSummary.tsx`, `AssetBreakdown.tsx`, and `FlowChart.tsx`. When the backend does not return `xlmPriceUsd` (e.g., when running without the AI backend), all three components fire independent `fetch()` calls to `https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd` in their `useEffect` hooks simultaneously. The Analytics page also fires a fourth fetch directly in `analytics/page.tsx` via the same pattern.
+**BUG-03 (MEDIUM):** `fetchXlmPrice()` is copy-pasted verbatim into four files. When the backend does not return `xlmPriceUsd`, all four `useEffect` hooks fire independent `fetch()` calls to CoinGecko simultaneously on mount — 3–4 outbound requests for identical data per page load.
 
-This means a single page load can produce **3–4 simultaneous outbound HTTP requests** to CoinGecko for the same data. On CoinGecko's free tier, this wastes rate-limit budget and risks 429s.
+**Files affected:** `FlowSummary.tsx:27`, `AssetBreakdown.tsx:25`, `FlowChart.tsx:10`, `analytics/page.tsx:14`
 
-**Root cause:** No shared price context or singleton hook. Each component reinvents the same `useEffect` + `useState<number | null>` pattern independently.
+**Fix suggestion:** Extract a `useXlmPrice(usd?: UsdValuation)` hook in `frontend/lib/useXlmPrice.ts` and share it across all consumers, or pass the resolved price down as a prop from the Analytics page (which already fetches it) to child components.
 
-**Screenshot:** `docs/grantfox-OSS/issue7-QA_analytics/bug03-duplicate-coingecko-fetches.png`
-
-**Fix suggestion:** Extract a `useXlmPrice(usd?: UsdValuation)` hook in `frontend/lib/useXlmPrice.ts` and share it, or pass the price down as a prop from the Analytics page (which already resolves it) to child components.
+![BUG-03 — 4 concurrent CoinGecko fetches per page load](../grantfox-OSS/issue7-QA_analytics/bug03-duplicate-coingecko-fetches.png)
 
 ---
 
 ## USD Math Verification
 
-Using the XLM price shown in the UI: `$0.1032` (example run).
+XLM price used during test: `$0.1032`
 
 | Asset | Raw Amount | Expected USD | Displayed USD | Match |
 |-------|-----------|--------------|---------------|-------|
@@ -161,13 +170,7 @@ Using the XLM price shown in the UI: `$0.1032` (example run).
 | Total inflow | — | $192.84 | $192.84 | ✅ |
 | Total outflow | — | $101.14 | $101.14 | ✅ |
 
-USD math is correct throughout. USDC is correctly pegged at 1:1. The CoinGecko "price fetched / converted using XLM = $…" note appears in:
-- FlowSummary (caption below Assets card, and the bottom note)
-- AssetBreakdown header
-- Weekly Trend footnote
-- Volatility interpretation line
-
-All attribution notes are present. ✅
+USD math is correct throughout. USDC is correctly pegged 1:1. CoinGecko attribution note is present in: FlowSummary (note row), AssetBreakdown (header), Weekly Trend (footnote), Volatility (interpretation line). ✅
 
 ---
 
@@ -175,15 +178,13 @@ All attribution notes are present. ✅
 
 | Panel | Result | Notes |
 |-------|--------|-------|
-| FlowSummary | ✅ Pass | 2-column grid on mobile (`grid-cols-2`) — readable, no overflow |
-| AssetBreakdown | ✅ Pass | Single column, labels truncate with ellipsis via `truncate` class |
+| FlowSummary | ✅ Pass | 2-column grid on mobile — readable, no overflow |
+| AssetBreakdown | ✅ Pass | Single column, labels truncate with ellipsis |
 | 7-Day Flow Pattern | ✅ Pass | Bars scale within container, no overflow |
-| Weekly Trend | ✅ Pass | Bars scale; date labels at 10 px font — small but legible |
-| Volatility | ✅ Pass | 2-column stat grid on mobile — fits without overflow |
-| Distribution | ✅ Pass | Bar labels (`< $1`, etc.) at fixed 72 px width — fits cleanly |
-| Sidebar (bottom nav) | ✅ Pass | Horizontally scrollable pill nav, no overflow, fade cue visible |
-
-No panels break or overflow on mobile width. ✅
+| Weekly Trend | ✅ Pass | Bars scale; date labels at 10 px — small but legible |
+| Volatility | ✅ Pass | 2-column stat grid — fits without overflow |
+| Distribution | ✅ Pass | 72 px bucket labels fit cleanly |
+| Bottom nav | ✅ Pass | Horizontally scrollable pill nav, fade cue visible |
 
 ---
 
@@ -191,23 +192,27 @@ No panels break or overflow on mobile width. ✅
 
 | ID | Severity | Panel | Description | File |
 |----|----------|-------|-------------|------|
-| BUG-01 | HIGH | FlowSummary | "Assets" stat shows bare `,` when `assets` prop is undefined | `frontend/app/components/FlowSummary.tsx:143` |
-| BUG-02 | MEDIUM | Distribution / Volatility / 7-Day | `transactions` array capped at 30 while `transactionCount` reports full backend count — misleads all chart panels | `frontend/lib/scoring.ts` (`parsePayments`) |
-| BUG-03 | MEDIUM | All analytics panels | Duplicate `fetchXlmPrice()` fires 3–4 concurrent CoinGecko requests per page load | `FlowSummary.tsx`, `AssetBreakdown.tsx`, `FlowChart.tsx`, `analytics/page.tsx` |
-| OBS-01 | LOW | 7-Day Flow Pattern | Bars skip calendar days with no activity; no empty-slot rendering or gap indicator | `frontend/app/components/FlowChart.tsx` |
-| OBS-02 | LOW | Weekly Trend | Week labels use `MM-DD` only — ambiguous when data spans a year boundary | `frontend/app/dashboard/analytics/page.tsx` (`WeeklyTrend`) |
+| BUG-01 | HIGH | FlowSummary | "Assets" stat shows bare `,` when `assets` prop is undefined | `FlowSummary.tsx:137` |
+| BUG-02 | MEDIUM | Distribution / Volatility / 7-Day | `transactions` capped at 30 while `transactionCount` reports full backend count | `lib/scoring.ts:204` |
+| BUG-03 | MEDIUM | All panels | `fetchXlmPrice()` duplicated in 4 files — 3–4 concurrent CoinGecko requests per load | `FlowSummary.tsx`, `AssetBreakdown.tsx`, `FlowChart.tsx`, `analytics/page.tsx` |
+| OBS-01 | LOW | 7-Day Flow Pattern | Chart skips calendar days with no activity — no gap indicator | `FlowChart.tsx` |
+| OBS-02 | LOW | Weekly Trend | Week labels `MM-DD` only — ambiguous across a year boundary | `analytics/page.tsx` (`WeeklyTrend`) |
 
 ---
 
 ## Screenshots Index
 
-All screenshots for this report are located in `docs/grantfox-OSS/issue7-QA_analytics/`:
+All files in `docs/grantfox-OSS/issue7-QA_analytics/`:
 
-- `bug01-assets-comma.png` — FlowSummary Assets stat showing `,` on local fallback path
-- `bug02-tx-count-mismatch.png` — Distribution footer tx count vs. FlowSummary count discrepancy
-- `bug03-duplicate-coingecko-fetches.png` — Network tab showing 3 parallel CoinGecko fetches
-- `obs01-7day-missing-days.png` — 7-Day chart with fewer than 7 bars (no gap indicators)
-- `obs02-weekly-label-no-year.png` — Weekly Trend labels across a year boundary
+| File | Description |
+|------|-------------|
+| `desktop-full-page.png` | Full analytics page — desktop layout |
+| `mobile-full-page.png` | Full analytics page — 375 px mobile layout |
+| `bug01-assets-comma.png` | Assets stat card showing bare `,` (broken) vs `—` (fixed) |
+| `bug02-tx-count-mismatch.png` | FlowSummary count vs Distribution footer count mismatch |
+| `bug03-duplicate-coingecko-fetches.png` | 4 parallel CoinGecko fetch calls on page mount |
+| `obs01-7day-missing-days.png` | 7-Day chart with gaps for inactive calendar days |
+| `obs02-weekly-label-no-year.png` | Weekly Trend labels ambiguous across year boundary |
 
 ---
 
@@ -217,9 +222,9 @@ All screenshots for this report are located in `docs/grantfox-OSS/issue7-QA_anal
 - [x] All panels render with data — no phantom empty states for active wallet
 - [x] USD math verified: XLM × price ≈ stated USD; USDC ≈ 1:1
 - [x] CoinGecko "price fetched / converted using XLM = $…" note confirmed present
-- [x] No panel crashes, mislabels, or overflows on mobile width
-- [x] Screenshots: full desktop + mobile layout, one per bug/observation
+- [x] No panel crashes, mislabels, or overflows on mobile width (375 px)
+- [x] Screenshots committed: 2 full-page (desktop + mobile) + 5 bug/observation images
 - [x] No transactions submitted (no tx hash)
-- [x] `npm run build` not needed (QA-report-only PR, no code changes)
+- [x] QA-report-only PR — no source files modified, build unaffected
 - [ ] Google Form submitted: https://forms.gle/kLYwDRdJo8WV1RTE7
-- [ ] In-app feedback sent via floating button
+- [ ] In-app feedback sent via floating Feedback button
