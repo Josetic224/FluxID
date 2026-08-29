@@ -132,7 +132,7 @@ The Analytics page functions correctly for its core purpose — all six panels r
 - Bar widths are proportional to count. ✅
 - Total priced tx count appears in the header. ✅
 - Empty state (`No priced transactions to distribute.`) renders correctly for wallets without price data. ✅
-- **BUG-02 (MEDIUM):** All chart panels consume `analysis.transactions`, which is capped at **30 items** by `parsePayments(...).slice(0, 30)` in `frontend/lib/scoring.ts`. The FlowSummary `transactionCount` reports the full backend count (e.g. 49), while the Distribution footer says "30 priced txs". The mismatch silently affects Volatility and Weekly Trend too.
+- **BUG-02 (MEDIUM):** All chart panels consume `analysis.transactions`, which is capped at **30 items** by `parsePayments(...).slice(0, 30)` in `frontend/lib/scoring.ts`. During testing, the Transactions stat card reported **100 transactions analyzed** (the full backend count), while the Transaction Size Distribution footer showed only **7 priced txs** — meaning all chart panels were working off a tiny fraction of the actual transaction history. The mismatch silently affects Volatility and Weekly Trend too. Of the 30 returned, only XLM and USDC transactions can be priced, reducing the effective chart input further — to as few as 7.
 
   **Root cause:**
   ```ts
@@ -142,7 +142,13 @@ The Analytics page functions correctly for its core purpose — all six panels r
 
   **Fix suggestion:** Remove the cap or raise it to 100 to match the Horizon fetch limit, or add a visible footnote clarifying the cap.
 
-![BUG-02 — 30-tx cap causes count mismatch](../grantfox-OSS/issue7-QA_analytics/bug02-tx-count-mismatch.png)
+**Transactions card — reports 100:**
+
+![BUG-02 — Transactions card showing 100](../grantfox-OSS/issue7-QA_analytics/bug02-tx-count-transactions-100.png)
+
+**Distribution footer — shows only 7 priced txs:**
+
+![BUG-02 — Distribution showing 7 priced txs](../grantfox-OSS/issue7-QA_analytics/bug02-tx-count-distribution-7.png)
 
 ---
 
@@ -193,7 +199,7 @@ USD math is correct throughout. USDC is correctly pegged 1:1. CoinGecko attribut
 | ID | Severity | Panel | Description | File |
 |----|----------|-------|-------------|------|
 | BUG-01 | HIGH | FlowSummary | "Assets" stat shows bare `,` when `assets` prop is undefined | `FlowSummary.tsx:137` |
-| BUG-02 | MEDIUM | Distribution / Volatility / 7-Day | `transactions` capped at 30 while `transactionCount` reports full backend count | `lib/scoring.ts:204` |
+| BUG-02 | MEDIUM | Distribution / Volatility / 7-Day | `transactions` capped at 30; Transactions card showed **100** but Distribution footer showed **7 priced txs** — charts work off a fraction of actual history | `lib/scoring.ts:204` |
 | BUG-03 | MEDIUM | All panels | `fetchXlmPrice()` duplicated in 4 files — 3–4 concurrent CoinGecko requests per load | `FlowSummary.tsx`, `AssetBreakdown.tsx`, `FlowChart.tsx`, `analytics/page.tsx` |
 | OBS-01 | LOW | 7-Day Flow Pattern | Chart skips calendar days with no activity — no gap indicator | `FlowChart.tsx` |
 | OBS-02 | LOW | Weekly Trend | Week labels `MM-DD` only — ambiguous across a year boundary | `analytics/page.tsx` (`WeeklyTrend`) |
@@ -209,7 +215,8 @@ All files in `docs/grantfox-OSS/issue7-QA_analytics/`:
 | `desktop-full-page.png` | Full analytics page — desktop layout |
 | `mobile-full-page.png` | Full analytics page — 375 px mobile layout |
 | `bug01-assets-comma.png` | Assets stat card showing bare `,` (broken) vs `—` (fixed) |
-| `bug02-tx-count-mismatch.png` | FlowSummary count vs Distribution footer count mismatch |
+| `bug02-tx-count-transactions-100.png` | Transactions stat card showing 100 (full backend count) |
+| `bug02-tx-count-distribution-7.png` | Distribution footer showing only 7 priced txs |
 | `bug03-duplicate-coingecko-fetches.png` | 4 parallel CoinGecko fetch calls on page mount |
 | `obs01-7day-missing-days.png` | 7-Day chart with gaps for inactive calendar days |
 | `obs02-weekly-label-no-year.png` | Weekly Trend labels ambiguous across year boundary |
